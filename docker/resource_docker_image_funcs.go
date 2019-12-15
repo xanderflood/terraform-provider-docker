@@ -83,14 +83,8 @@ func searchLocalImages(data Data, imageName string) *types.ImageSummary {
 }
 
 func removeImage(d *schema.ResourceData, client *client.Client) error {
-	var data Data
-
 	if keepLocally := d.Get("keep_locally").(bool); keepLocally {
 		return nil
-	}
-
-	if err := fetchLocalImages(&data, client); err != nil {
-		return err
 	}
 
 	imageName := d.Get("name").(string)
@@ -98,6 +92,15 @@ func removeImage(d *schema.ResourceData, client *client.Client) error {
 		return fmt.Errorf("Empty image name is not allowed")
 	}
 
+	var data Data
+	if err := fetchLocalImages(&data, client); err != nil {
+		return err
+	}
+
+	return forceRemoveImage(imageName, data, client)
+}
+
+func forceRemoveImage(imageName string, data Data, client *client.Client) error {
 	foundImage := searchLocalImages(data, imageName)
 
 	if foundImage != nil {
@@ -138,9 +141,13 @@ func fetchLocalImages(data *Data, client *client.Client) error {
 	return nil
 }
 
-func pullImage(data *Data, client *client.Client, authConfig *AuthConfigs, image string) error {
+func pullImage(client *client.Client, authConfig *AuthConfigs, image string) error {
 	pullOpts := parseImageOptions(image)
 
+	return pullImageWithPullOpts(client, authConfig, image, pullOpts)
+}
+
+func pullImageWithPullOpts(client *client.Client, authConfig *AuthConfigs, image string, pullOpts internalPullImageOptions) error {
 	// If a registry was specified in the image name, try to find auth for it
 	auth := types.AuthConfig{}
 	if pullOpts.Registry != "" {
@@ -228,7 +235,7 @@ func findImage(imageName string, client *client.Client, authConfig *AuthConfigs)
 		return foundImage, nil
 	}
 
-	if err := pullImage(&data, client, authConfig, imageName); err != nil {
+	if err := pullImage(client, authConfig, imageName); err != nil {
 		return nil, fmt.Errorf("Unable to pull image %s: %s", imageName, err)
 	}
 

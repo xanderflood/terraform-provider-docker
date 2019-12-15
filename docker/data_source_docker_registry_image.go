@@ -34,8 +34,21 @@ func dataSourceDockerRegistryImage() *schema.Resource {
 }
 
 func dataSourceDockerRegistryImageRead(d *schema.ResourceData, meta interface{}) error {
-	pullOpts := parseImageOptions(d.Get("name").(string))
 	authConfig := meta.(*ProviderConfig).AuthConfigs
+	name := d.Get("name").(string)
+
+	digest, err := getLatestImageDigestByName(name, authConfig)
+	if err != nil {
+		return err
+	}
+
+	d.SetId(digest)
+	d.Set("sha256_digest", digest)
+	return nil
+}
+
+func getLatestImageDigestByName(name string, authConfig *AuthConfigs) (string, error) {
+	pullOpts := parseImageOptions(name)
 
 	// Use the official Docker Hub if a registry isn't specified
 	if pullOpts.Registry == "" {
@@ -69,14 +82,11 @@ func dataSourceDockerRegistryImageRead(d *schema.ResourceData, meta interface{})
 	if err != nil {
 		digest, err = getImageDigest(pullOpts.Registry, pullOpts.Repository, pullOpts.Tag, username, password, true)
 		if err != nil {
-			return fmt.Errorf("Got error when attempting to fetch image version from registry: %s", err)
+			return "", fmt.Errorf("Got error when attempting to fetch image version from registry: %s", err)
 		}
 	}
 
-	d.SetId(digest)
-	d.Set("sha256_digest", digest)
-
-	return nil
+	return digest, nil
 }
 
 func getImageDigest(registry, image, tag, username, password string, fallback bool) (string, error) {
